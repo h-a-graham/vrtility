@@ -4,6 +4,7 @@
 // Requires GDAL >= 3.4 for GDALAddDerivedBandPixelFuncWithArgs.
 
 #include <gdal.h>
+#include <gdal_version.h>
 #include <gdal_vrt.h>
 #include <cpl_string.h>
 #include <cpl_conv.h>
@@ -372,6 +373,16 @@ CPLErr vrtility_mean_db(void **papoSources, int nSources, void *pData,
 extern "C" {
 
 void vrtility_register_pixfuns(void) {
+  // GDAL 3.12+ added a third pszMetadata parameter
+#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3, 12, 0)
+  GDALAddDerivedBandPixelFuncWithArgs("vrtility_intmask", vrtility_intmask, nullptr);
+  GDALAddDerivedBandPixelFuncWithArgs("vrtility_bitmask", vrtility_bitmask, nullptr);
+  GDALAddDerivedBandPixelFuncWithArgs("vrtility_median", vrtility_median, nullptr);
+  GDALAddDerivedBandPixelFuncWithArgs("vrtility_mean", vrtility_mean, nullptr);
+  GDALAddDerivedBandPixelFuncWithArgs("vrtility_geomean", vrtility_geomean, nullptr);
+  GDALAddDerivedBandPixelFuncWithArgs("vrtility_quantile", vrtility_quantile, nullptr);
+  GDALAddDerivedBandPixelFuncWithArgs("vrtility_mean_db", vrtility_mean_db, nullptr);
+#else
   GDALAddDerivedBandPixelFuncWithArgs("vrtility_intmask", vrtility_intmask);
   GDALAddDerivedBandPixelFuncWithArgs("vrtility_bitmask", vrtility_bitmask);
   GDALAddDerivedBandPixelFuncWithArgs("vrtility_median", vrtility_median);
@@ -379,6 +390,7 @@ void vrtility_register_pixfuns(void) {
   GDALAddDerivedBandPixelFuncWithArgs("vrtility_geomean", vrtility_geomean);
   GDALAddDerivedBandPixelFuncWithArgs("vrtility_quantile", vrtility_quantile);
   GDALAddDerivedBandPixelFuncWithArgs("vrtility_mean_db", vrtility_mean_db);
+#endif
 }
 
 }  // extern "C"
