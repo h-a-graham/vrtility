@@ -14,7 +14,7 @@ and time series filtering.
 
 Key features include:
 \itemize{
-\item Cloud masking via VRT pixel functions (Python/NumPy or GDAL/muparser)
+\item Cloud masking via VRT MaskBand with C++ pixel functions
 \item Multi-band compositing methods (median, geomedian, medoid) that
 maintain spectral consistency
 \item Time series filtering (e.g. Hampel filter) for temporal noise reduction
@@ -49,8 +49,8 @@ Powered by \href{https://firelab.github.io/gdalraster/}{gdalraster}.
 \describe{
 \item{\code{\link{vrt_set_maskfun}}}{Set a mask function for a vrt object}
 \item{\code{\link{vrt_create_mask}}}{Create a mask for a vrt object}
-\item{\code{\link{build_intmask}}}{Build a mask from integer values (auto-selects muparser or Python)}
-\item{\code{\link{build_bitmask}}}{Build a mask from bit positions (auto-selects muparser or Python)}
+\item{\code{\link{build_intmask}}}{Build a mask from integer values (C++ pixel function)}
+\item{\code{\link{build_bitmask}}}{Build a mask from bit positions (C++ pixel function)}
 \item{\code{\link{create_omnicloudmask}}}{Create a cloud mask using the omnicloudmask algorithm}
 }
 }
