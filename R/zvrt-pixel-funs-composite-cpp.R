@@ -2,22 +2,13 @@
 #' @description These functions return the name of a registered C++ pixel
 #' function for use with `vrt_set_gdal_pixelfun()`. They are faster than
 #' the Python equivalents and don't require Python dependencies.
-#' Available when the package is compiled with GDAL >= 3.4.
+#' Requires GDAL >= 3.4 at compile time.
 #' @rdname vrt_set_gdal_pixelfun
 #' @details `median_cpp` is a C++ pixel function that calculates the median of
-#' the input arrays, skipping NoData values. Falls back to `median_numpy()`
-#' if C++ pixel functions are not available.
+#' the input arrays, skipping NoData values.
 #' @export
 median_cpp <- function() {
-  if (!has_cpp_pixfuns()) {
-    cli::cli_warn(
-      c(
-        "!" = "C++ pixel functions not available, falling back to Python.",
-        "i" = "Ensure GDAL >= 3.4 headers are available at compile time."
-      )
-    )
-    return(median_numpy())
-  }
+  assert_cpp_pixfuns()
   "vrtility_median"
 }
 
@@ -26,15 +17,7 @@ median_cpp <- function() {
 #' input arrays, skipping NoData values.
 #' @export
 mean_cpp <- function() {
-  if (!has_cpp_pixfuns()) {
-    cli::cli_warn(
-      c(
-        "!" = "C++ pixel functions not available, falling back to Python.",
-        "i" = "Ensure GDAL >= 3.4 headers are available at compile time."
-      )
-    )
-    return(mean_numpy())
-  }
+  assert_cpp_pixfuns()
   "vrtility_mean"
 }
 
@@ -43,15 +26,7 @@ mean_cpp <- function() {
 #' mean of the input arrays, skipping NoData values.
 #' @export
 geomean_cpp <- function() {
-  if (!has_cpp_pixfuns()) {
-    cli::cli_warn(
-      c(
-        "!" = "C++ pixel functions not available, falling back to Python.",
-        "i" = "Ensure GDAL >= 3.4 headers are available at compile time."
-      )
-    )
-    return(geomean_numpy())
-  }
+  assert_cpp_pixfuns()
   "vrtility_geomean"
 }
 
@@ -62,15 +37,7 @@ geomean_cpp <- function() {
 #' of the input arrays, skipping NoData values.
 #' @export
 quantile_cpp <- function(q = 0.5) {
-  if (!has_cpp_pixfuns()) {
-    cli::cli_warn(
-      c(
-        "!" = "C++ pixel functions not available, falling back to Python.",
-        "i" = "Ensure GDAL >= 3.4 headers are available at compile time."
-      )
-    )
-    return(quantile_numpy(q))
-  }
+  assert_cpp_pixfuns()
   "vrtility_quantile"
 }
 
@@ -80,14 +47,6 @@ quantile_cpp <- function(q = 0.5) {
 #' backscatter data.
 #' @export
 mean_db_cpp <- function() {
-  if (!has_cpp_pixfuns()) {
-    cli::cli_warn(
-      c(
-        "!" = "C++ pixel functions not available, falling back to Python.",
-        "i" = "Ensure GDAL >= 3.4 headers are available at compile time."
-      )
-    )
-    return(mean_db_numpy())
-  }
+  assert_cpp_pixfuns()
   "vrtility_mean_db"
 }

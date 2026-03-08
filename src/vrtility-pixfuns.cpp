@@ -1,8 +1,7 @@
 // vrtility C++ pixel functions for GDAL VRT derived bands
 // Registered via GDALAddDerivedBandPixelFuncWithArgs at package load time.
 // These replace Python/muparser pixel functions for masking and compositing.
-
-#ifdef HAVE_GDAL_PIXFUN
+// Requires GDAL >= 3.4 for GDALAddDerivedBandPixelFuncWithArgs.
 
 #include <gdal.h>
 #include <gdal_vrt.h>
@@ -383,5 +382,3 @@ void vrtility_register_pixfuns(void) {
 }
 
 }  // extern "C"
-
-#endif  // HAVE_GDAL_PIXFUN

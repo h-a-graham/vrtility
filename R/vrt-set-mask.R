@@ -2,51 +2,39 @@
 #' @param x A VRT type object (collection or block)
 #' @param mask_values A numeric vector of integer or bit values to be masked.
 #' @param mask_band The name of the mask band
-#' @param build_mask_pixfun A character string of the Python code or muparser
-#' expression to build the mask. If `NULL` (default), automatically uses
-#' [build_intmask()] which will choose muparser if the option `vrtility.use_muparser`
-#' is `TRUE` with no buffering, otherwise a Python based implementation is used.
-#'  Provided functions include \code{build_intmask} and \code{build_bitmask}. See details.
+#' @param build_mask_pixfun A C++ pixel function for building the mask. If
+#' `NULL` (default), uses [build_intmask()] which returns a registered C++
+#' pixel function. Provided functions include [build_intmask()] and
+#' [build_bitmask()]. Python pixel functions are only supported when
+#' `buffer_size > 0`.
 #' @param buffer_size A buffer size to apply to the mask (numeric, default: 0). A buffer
 #' size > 0 will dilate the mask by the specified number of pixels.
 #' This can be useful to remove edge effects around clouds.
 #' If a buffer size > 0 is specified, the `scipy` python library will
-#' automatically be installed and Python will be used (muparser cannot do buffering).
+#' automatically be installed and the legacy Python masking path will be used.
 #' @param drop_mask_band Logical. If TRUE, the mask band will be removed from
 #' the VRT block.
 #' @export
 #' @rdname vrt_set_maskfun
 #' @details
-#' The `build_mask_pixfun` function is used to build the mask band. Where the
-#' mask band is a true bitmask and bit-wise operations are required, the
-#' [build_bitmask()] function should be used. For integer-based masking, where
-#' the mask band is provided as a single band with integer values, the
-#' [build_intmask()] function should be used.
+#' Masking uses GDAL's native VRT MaskBand mechanism (RFC 15). A C++ pixel
+#' function converts classification values to a standard mask (0=invalid,
+#' 255=valid), which is set as a dataset-level MaskBand. An outer VRT then
+#' references the inner VRT using ComplexSource with UseMaskBand=true, so
+#' GDAL natively handles the masking.
 #'
-#' By default (when `build_mask_pixfun = NULL`), the function automatically
-#' selects the most efficient implementation:
-#' - GDAL >= 3.12 with no buffering: Uses muparser expressions (fastest, no Python)
-#' - GDAL < 3.12 or buffering needed: Uses Python/NumPy
-#'
+#' For integer-based masking (e.g. Sentinel-2 SCL band), use [build_intmask()].
+#' For bitwise masking (e.g. HLS Fmask), use [build_bitmask()].
 #'
 #' @examples
 #' s2files <- fs::dir_ls(system.file("s2-data", package = "vrtility"))
 #'
 #' ex_collect <- vrt_collect(s2files)
 #'
-#' # Auto-selects muparser or Python based on GDAL version
 #' ex_collect |>
 #'   vrt_set_maskfun(
 #'     mask_band = "SCL",
 #'     mask_values = c(0, 1, 2, 3, 8, 9, 10, 11),
-#'     drop_mask_band = FALSE)
-#'
-#' # Force Python implementation
-#' ex_collect |>
-#'   vrt_set_maskfun(
-#'     mask_band = "SCL",
-#'     mask_values = c(0, 1, 2, 3, 8, 9, 10, 11),
-#'     build_mask_pixfun = build_intmask(),
 #'     drop_mask_band = FALSE)
 #'
 vrt_set_maskfun <- function(
@@ -99,9 +87,17 @@ vrt_set_maskfun.vrt_block <- function(
 
   v_assert_type(build_mask_pixfun, "mask_pix_fun", "character", nullok = FALSE)
 
-  # Use proper VRT MaskBand approach when C++ pixel functions are available
-  # and no buffering is needed
-  if (inherits(build_mask_pixfun, "cpp_pixel_function") && buffer_size == 0) {
+  # Use proper VRT MaskBand approach (C++ pixel functions required)
+  if (buffer_size == 0) {
+    if (!inherits(build_mask_pixfun, "cpp_pixel_function")) {
+      cli::cli_abort(
+        c(
+          "!" = "Non-C++ pixel functions are not supported for masking without buffering.",
+          "i" = "Use {.fn build_intmask} or {.fn build_bitmask} (default).",
+          "i" = "Python pixel functions are only supported with {.arg buffer_size} > 0."
+        )
+      )
+    }
     return(
       set_maskfun_maskband(
         x = x,
@@ -113,7 +109,7 @@ vrt_set_maskfun.vrt_block <- function(
     )
   }
 
-  # Legacy path: pixel-function-per-band approach
+  # Legacy path: only for buffer_size > 0 (requires Python/scipy)
   set_maskfun_legacy(
     x = x,
     mask_band = mask_band,

@@ -8,7 +8,7 @@
 #'
 #' Key features include:
 #' \itemize{
-#'   \item Cloud masking via VRT pixel functions (Python/NumPy or GDAL/muparser)
+#'   \item Cloud masking via VRT MaskBand with C++ pixel functions
 #'   \item Multi-band compositing methods (median, geomedian, medoid) that
 #'     maintain spectral consistency
 #'   \item Time series filtering (e.g. Hampel filter) for temporal noise reduction
@@ -36,8 +36,8 @@
 #' \describe{
 #' \item{\code{\link{vrt_set_maskfun}}}{Set a mask function for a vrt object}
 #' \item{\code{\link{vrt_create_mask}}}{Create a mask for a vrt object}
-#' \item{\code{\link{build_intmask}}}{Build a mask from integer values (auto-selects muparser or Python)}
-#' \item{\code{\link{build_bitmask}}}{Build a mask from bit positions (auto-selects muparser or Python)}
+#' \item{\code{\link{build_intmask}}}{Build a mask from integer values (C++ pixel function)}
+#' \item{\code{\link{build_bitmask}}}{Build a mask from bit positions (C++ pixel function)}
 #' \item{\code{\link{create_omnicloudmask}}}{Create a cloud mask using the omnicloudmask algorithm}
 #' }
 #' @section VRT Helpers:
@@ -141,8 +141,16 @@
   check_gdal_and_warn()
   set_gdal_cache_max()
 
-  # Register C++ pixel functions with GDAL (if compiled with GDAL support)
+  # Register C++ pixel functions with GDAL (required — GDAL >= 3.4)
   .vrtility_cache$has_cpp_pixfuns <- register_vrtility_pixel_functions()
+  if (!.vrtility_cache$has_cpp_pixfuns) {
+    stop(
+      "Failed to register C++ pixel functions with GDAL. ",
+      "vrtility requires GDAL >= 3.4. ",
+      "Reinstall the package with GDAL >= 3.4 headers available.",
+      call. = FALSE
+    )
+  }
 
   # Cache the VRT schema for validation (avoids repeated XML parsing)
   .vrtility_cache$vrt_schema <- xml2::read_xml(vrtility::vrt_xml_schema)
@@ -176,8 +184,7 @@ vrt_opts_set <- function() {
     vrt.percent.ram = 60,
     vrt.pause.base = 1,
     vrt.pause.cap = 10,
-    vrt.max.times = 3,
-    vrtility.use_muparser = FALSE
+    vrt.max.times = 3
   )
 
   toset <- !(names(op_vrtility) %in% names(op))

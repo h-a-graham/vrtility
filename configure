@@ -27,29 +27,26 @@ else
     echo "Found GDAL ${GDAL_VERSION} via pkg-config"
   else
     echo "-------------------------------------------------------"
-    echo "GDAL not found via gdal-config or pkg-config."
-    echo "C++ pixel functions will not be available."
-    echo "Python/muparser pixel functions will be used as fallback."
+    echo "ERROR: GDAL not found via gdal-config or pkg-config."
+    echo "GDAL >= 3.4 is required for vrtility."
     echo "-------------------------------------------------------"
-    GDAL_CFLAGS=""
-    GDAL_LIBS=""
-    GDAL_VERSION=""
+    exit 1
   fi
 fi
 
 # Check for GDAL >= 3.4 (needed for GDALAddDerivedBandPixelFuncWithArgs)
-HAVE_GDAL_PIXFUN="no"
 if test -n "${GDAL_VERSION}"; then
   GDAL_MAJOR=$(echo "${GDAL_VERSION}" | cut -d. -f1)
   GDAL_MINOR=$(echo "${GDAL_VERSION}" | cut -d. -f2)
   if test "${GDAL_MAJOR}" -gt 3 2>/dev/null || \
      (test "${GDAL_MAJOR}" -eq 3 && test "${GDAL_MINOR}" -ge 4 2>/dev/null); then
-    HAVE_GDAL_PIXFUN="yes"
     echo "GDAL >= 3.4 detected: C++ pixel functions enabled"
   else
-    echo "GDAL < 3.4: C++ pixel functions disabled (need >= 3.4)"
-    GDAL_CFLAGS=""
-    GDAL_LIBS=""
+    echo "-------------------------------------------------------"
+    echo "ERROR: GDAL >= 3.4 is required for vrtility."
+    echo "Found GDAL ${GDAL_VERSION} which is too old."
+    echo "-------------------------------------------------------"
+    exit 1
   fi
 fi
 
@@ -57,7 +54,6 @@ fi
 sed \
   -e "s|@GDAL_CFLAGS@|${GDAL_CFLAGS}|" \
   -e "s|@GDAL_LIBS@|${GDAL_LIBS}|" \
-  -e "s|@HAVE_GDAL_PIXFUN@|${HAVE_GDAL_PIXFUN}|" \
   src/Makevars.in > src/Makevars
 
 echo "Configuration complete."

@@ -1,16 +1,11 @@
 // R-callable wrapper for registering vrtility pixel functions with GDAL
+// GDAL >= 3.4 is required — no fallback.
 #include <Rcpp.h>
 
-#ifdef HAVE_GDAL_PIXFUN
 extern "C" void vrtility_register_pixfuns(void);
-#endif
 
 // [[Rcpp::export]]
 bool register_vrtility_pixel_functions() {
-#ifdef HAVE_GDAL_PIXFUN
   vrtility_register_pixfuns();
   return true;
-#else
-  return false;
-#endif
 }

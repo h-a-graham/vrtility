@@ -4,18 +4,14 @@
 #' size > 0 will dilate the mask by the specified number of pixels.
 #' This can be useful to remove edge effects around clouds.
 #' If a buffer size > 0 is specified, the `scipy` python library will
-#' automatically be installed.
-#' @param use_muparser Logical. If `TRUE` and GDAL is built with muparser
-#' support (GDAL >= 3.12.0), uses muparser expression instead of Python.
+#' automatically be installed and the legacy Python path will be used.
 #' @noRd
 #' @keywords internal
-#' @details `set_mask` simply applies a given mask where values of 0 are
-#' assumed to have nodata and values > 0  contain valid data.
+#' @details `set_mask` applies a given mask. Only used in the legacy
+#' pixel-function-per-band path (when buffer_size > 0). For buffer_size == 0,
+#' the MaskBand approach is used instead.
 #' @rdname vrt_set_maskfun
-set_mask <- function(
-  buffer_size = 0,
-  use_muparser = getOption("vrtility.use_muparser", FALSE)
-) {
+set_mask <- function(buffer_size = 0) {
   v_assert_type(
     buffer_size,
     "buffer_size",
@@ -30,39 +26,15 @@ set_mask <- function(
     Inf
   )
 
-  if (buffer_size == 0 && check_muparser("3.12.0") && use_muparser) {
-    return(set_mask_muparser())
-  }
-
   if (buffer_size > 0) {
-    # assert omicloudmask is installed
     vrtility_py_require("scipy")
   }
 
   return(set_mask_python(buffer_size))
 }
 
-#' @details `set_mask_muparser` provides a muparser expression for simple masking
-#' where mask values of 0 indicate nodata and values > 0 indicate valid data.
-#' This is faster than the Python version when buffering is not needed, and
-#' doesn't require Python dependencies.
-#' @noRd
-#' @keywords internal
-set_mask_muparser <- function() {
-  e <- "{bands[2]} != 0 ? {bands[1]} : NODATA"
-  class(e) <- c("muparser_expression", class(e))
-  return(e)
-}
-
-#' @param buffer_size A buffer size to apply to the mask (numeric, default: 0). A buffer
-#' size > 0 will dilate the mask by the specified number of pixels.
-#' This can be useful to remove edge effects around clouds.
-#' If a buffer size > 0 is specified, the `scipy` python library will
-#' automatically be installed.
-#' @details `set_mask_python` provides a Python pixel function for masking
-#' where mask values of 0 indicate nodata and values > 0 indicate valid data.
-#' This function also supports buffering of the mask using a specified buffer
-#' size.
+#' @details `set_mask_python` provides a Python pixel function for masking.
+#' Only used for buffered masking (buffer_size > 0).
 #' @noRd
 #' @keywords internal
 set_mask_python <- function(buffer_size) {
@@ -97,42 +69,17 @@ def bitmask(in_ar, out_ar, xoff, yoff, xsize, ysize, raster_xsize,
 }
 
 
-#' @details `build_intmask` provides an integer mask function that can be used
-#' to mask out pixels based on a band containing true integer/numeric values.
-#' This would be appropriate for the Sentinel 2A SCL band, for example.
-#' @param use_muparser Logical. If `TRUE` and GDAL >= 3.12, uses muparser
-#' expression instead of Python. Default is to auto-detect based on GDAL version.
+#' @details `build_intmask` returns a C++ pixel function for integer value
+#' masking. This is used to mask out pixels based on a band containing integer
+#' values (e.g. the Sentinel-2 SCL band). The C++ function is registered with
+#' GDAL at package load time.
 #' @export
 #' @rdname vrt_set_maskfun
-build_intmask <- function(
-  use_muparser = getOption("vrtility.use_muparser", FALSE)
-) {
-  v_assert_type(
-    use_muparser,
-    "use_muparser",
-    "logical",
-    nullok = FALSE
-  )
-
-  # Prefer C++ registered pixel function when available
-  if (has_cpp_pixfuns()) {
-    return(build_intmask_cpp())
-  }
-
-  if (use_muparser) {
-    if (!check_muparser("3.11.4")) {
-      muparser_mask_warn("build_intmask")
-      return(build_intmask_python())
-    }
-    return(build_intmask_muparser())
-  }
-
-  return(build_intmask_python())
+build_intmask <- function() {
+  assert_cpp_pixfuns()
+  build_intmask_cpp()
 }
 
-#' @details `build_intmask_cpp` returns a C++ pixel function name for integer
-#' masking. The C++ function is registered with GDAL at package load time.
-#' This is the fastest option and doesn't require Python or muparser.
 #' @noRd
 #' @keywords internal
 build_intmask_cpp <- function() {
@@ -141,73 +88,17 @@ build_intmask_cpp <- function() {
   return(pf)
 }
 
-build_intmask_python <- function() {
-  pf <- glue::glue(
-    "
-import numpy as np
-def build_mask(in_ar, out_ar, xoff, yoff, xsize, ysize, raster_xsize,
-                  raster_ysize, buf_radius, gt, **kwargs):
-    mask_vals =  [int(x) for x in kwargs['mask_values'].decode().split(',')]
-    mask = np.isin(in_ar[0], mask_vals)
-    out_ar[:] = np.where(mask, 0, 1)
-"
-  )
-  class(pf) <- c("python_pixel_function", class(pf))
-  return(pf)
-}
 
-
-#' @details `build_intmask_muparser` provides a muparser expression template for
-#' integer masking where specified values indicate invalid data (set to 0 in mask).
-#' Returns a glue template that will be filled with mask_values later.
-#' @noRd
-#' @keywords internal
-build_intmask_muparser <- function() {
-  # Return a glue template that will be filled with mask_values
-  # The expression checks if B1 equals any mask value
-  expr <- "({paste0('B1==', mask_values, collapse = ' || ')}) ? 0 : 1"
-
-  class(expr) <- c("muparser_expression", class(expr))
-  return(expr)
-}
-
-
-#' @details `build_bitmask` provides is a simple bit-wise mask function that can
-#' be used to mask out pixels based on a true bit mask. This function should be
-#' used where bitwise operations are required. e.g. for HLS data, the "Fmask"
-#' band requires bitwise operations to extract the mask values.
-#' @param use_muparser Logical. If `TRUE` and GDAL >= 3.12, uses muparser
+#' @details `build_bitmask` returns a C++ pixel function for bitwise masking.
+#' This should be used where bitwise operations are required, e.g. for HLS
+#' data where the "Fmask" band requires bitwise operations.
 #' @export
 #' @rdname vrt_set_maskfun
-build_bitmask <- function(
-  use_muparser = getOption("vrtility.use_muparser", FALSE)
-) {
-  v_assert_type(
-    use_muparser,
-    "use_muparser",
-    "logical",
-    nullok = FALSE
-  )
-
-  # Prefer C++ registered pixel function when available
-  if (has_cpp_pixfuns()) {
-    return(build_bitmask_cpp())
-  }
-
-  if (!use_muparser) {
-    return(build_bitmask_python())
-  }
-
-  if (!check_muparser()) {
-    muparser_mask_warn("build_bitmask")
-    return(build_bitmask_python())
-  }
-
-  return(build_bitmask_muparser())
+build_bitmask <- function() {
+  assert_cpp_pixfuns()
+  build_bitmask_cpp()
 }
 
-#' @details `build_bitmask_cpp` returns a C++ pixel function name for bitwise
-#' masking. The C++ function is registered with GDAL at package load time.
 #' @noRd
 #' @keywords internal
 build_bitmask_cpp <- function() {
@@ -216,55 +107,20 @@ build_bitmask_cpp <- function() {
   return(pf)
 }
 
-#' @details `build_bitmask_python` provides a Python pixel function for bitwise
-#' masking where specified bit positions indicate invalid data.
+#' Assert that C++ pixel functions are registered
 #' @noRd
 #' @keywords internal
-build_bitmask_python <- function() {
-  pf <- glue::glue(
-    glue::glue(
-      "
-import numpy as np
-def build_mask(in_ar, out_ar, xoff, yoff, xsize, ysize, raster_xsize,
-                  raster_ysize, buf_radius, gt, **kwargs):
-    bit_positions = [int(x) for x in kwargs['mask_values'].decode().split(',')]
-    mask = np.zeros_like(in_ar[0], dtype=bool)
-    for bit in bit_positions:
-        mask |= np.bitwise_and(in_ar[0], np.left_shift(1, bit)) > 0
-    out_ar[:] = np.where(mask, 0, 1)
-"
+assert_cpp_pixfuns <- function() {
+  if (!has_cpp_pixfuns()) {
+    cli::cli_abort(
+      c(
+        "!" = "C++ pixel functions are not available.",
+        "i" = "vrtility requires GDAL >= 3.4 headers at compile time.",
+        "i" = "Reinstall the package with GDAL >= 3.4 available."
+      )
     )
-  )
-  class(pf) <- c("python_pixel_function", class(pf))
-  return(pf)
+  }
 }
-
-#' @details `build_bitmask_muparser` provides a muparser expression template for
-#' bitwise masking where specified bit positions indicate invalid data.
-#' Returns a glue template that will be filled with mask_values later.
-#' @noRd
-#' @keywords internal
-build_bitmask_muparser <- function() {
-  # Return a glue template that will be filled with mask_values
-  # The expression checks if any specified bits are set
-  # For each bit: (B1 & (1 << bit)) > 0
-  # Need to wrap paste0 call properly and ensure parentheses are correct
-  expr <- "{paste0(
-  '(fmod(B1, ', 2^(mask_values + 1), ') >= ', 2^mask_values, ')',
-  collapse = ' || '
-)} ? 0 : 1"
-  class(expr) <- c("muparser_expression", class(expr))
-  return(expr)
-}
-
-# NOTE: we use 1 not 255 as a valid data value in the mask because HLS data uses
-# 255 as no data, which results in masking the entire raster. This is becuase
-# we apply the masks in an unconventional way using pixel functions and not
-# using the RFC 15 approach. I've tried various approaches to get this to work
-# but it seems that the RFC 15 approach is not compatible with a mask containing
-# pixel functions. If anyone has a solution to this please let me know.
-
-# nolint
 
 #' @title Construct a cloud mask using the OmniCloudMask python library.
 #' @description This function constructs a cloud mask using the OmniCloudMask
