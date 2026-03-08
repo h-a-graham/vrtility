@@ -17,3 +17,7 @@ restructure_cells_cpp <- function(cell_vals) {
     .Call(`_vrtility_restructure_cells_cpp`, cell_vals)
 }
 
+register_vrtility_pixel_functions <- function() {
+    .Call(`_vrtility_register_vrtility_pixel_functions`)
+}
+

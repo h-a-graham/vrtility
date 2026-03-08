@@ -141,8 +141,19 @@
   check_gdal_and_warn()
   set_gdal_cache_max()
 
+  # Register C++ pixel functions with GDAL (if compiled with GDAL support)
+  .vrtility_cache$has_cpp_pixfuns <- register_vrtility_pixel_functions()
+
   # Cache the VRT schema for validation (avoids repeated XML parsing)
   .vrtility_cache$vrt_schema <- xml2::read_xml(vrtility::vrt_xml_schema)
+}
+
+#' Check if C++ pixel functions are registered with GDAL
+#' @return Logical indicating whether C++ pixel functions are available
+#' @keywords internal
+#' @noRd
+has_cpp_pixfuns <- function() {
+  isTRUE(.vrtility_cache$has_cpp_pixfuns)
 }
 
 #' Get the cached VRT schema

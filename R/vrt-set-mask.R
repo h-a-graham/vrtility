@@ -99,6 +99,210 @@ vrt_set_maskfun.vrt_block <- function(
 
   v_assert_type(build_mask_pixfun, "mask_pix_fun", "character", nullok = FALSE)
 
+  # Use proper VRT MaskBand approach when C++ pixel functions are available
+  # and no buffering is needed
+  if (inherits(build_mask_pixfun, "cpp_pixel_function") && buffer_size == 0) {
+    return(
+      set_maskfun_maskband(
+        x = x,
+        mask_band = mask_band,
+        mask_values = mask_values,
+        build_mask_pixfun = build_mask_pixfun,
+        drop_mask_band = drop_mask_band
+      )
+    )
+  }
+
+  # Legacy path: pixel-function-per-band approach
+  set_maskfun_legacy(
+    x = x,
+    mask_band = mask_band,
+    mask_values = mask_values,
+    build_mask_pixfun = build_mask_pixfun,
+    buffer_size = buffer_size,
+    drop_mask_band = drop_mask_band
+  )
+}
+
+
+#' VRT MaskBand approach (proper GDAL masking via RFC 15)
+#'
+#' Creates a two-VRT pattern:
+#' 1. Inner VRT: data bands + dataset-level MaskBand (derived from
+#'    classification band via C++ pixel function)
+#' 2. Outer VRT: references inner VRT using ComplexSource with
+#'    UseMaskBand=true so GDAL natively masks pixels
+#'
+#' @keywords internal
+#' @noRd
+set_maskfun_maskband <- function(
+  x,
+  mask_band,
+  mask_values,
+  build_mask_pixfun,
+  drop_mask_band
+) {
+  vx <- xml2::read_xml(x$vrt)
+
+  no_data <- xml2::xml_find_first(vx, ".//NoDataValue") |>
+    xml2::xml_double()
+
+  if (is.na(no_data)) no_data <- 0
+
+  bands <- xml2::xml_find_all(vx, ".//VRTRasterBand")
+  descs <- purrr::map_chr(
+    bands,
+    ~ xml2::xml_text(xml2::xml_find_first(.x, ".//Description"))
+  )
+
+  mask_idx <- which(descs == mask_band)
+
+  if (length(mask_idx) == 0) {
+    cli::cli_abort(c(
+      "Could not find mask band: {.val {mask_band}}",
+      "i" = "Available bands: {.val {descs}}"
+    ))
+  }
+
+  # --- Step 1: Create inner VRT with MaskBand ---
+
+  # Now create the inner VRT: original data bands + MaskBand element
+  inner_vx <- xml2::read_xml(x$vrt)
+  inner_bands <- xml2::xml_find_all(inner_vx, ".//VRTRasterBand")
+
+  # Get the source info from the original mask band before removing it
+  orig_mask_band <- inner_bands[[mask_idx]]
+  orig_src <- vrt_find_first_src(orig_mask_band)
+
+  # Drop the mask band from data bands if requested
+  if (drop_mask_band) {
+    xml2::xml_remove(inner_bands[[mask_idx]])
+    inner_bands <- xml2::xml_find_all(inner_vx, ".//VRTRasterBand")
+    purrr::walk(seq_along(inner_bands), function(i) {
+      xml2::xml_set_attr(inner_bands[[i]], "band", i)
+    })
+  }
+
+  # Add MaskBand element at the dataset level
+  mask_band_elem <- xml2::xml_add_child(inner_vx, "MaskBand")
+  mask_rb <- xml2::xml_add_child(
+    mask_band_elem,
+    "VRTRasterBand",
+    .where = 0
+  )
+  xml2::xml_set_attr(mask_rb, "dataType", "Byte")
+  xml2::xml_set_attr(mask_rb, "subClass", "VRTDerivedRasterBand")
+  xml2::xml_add_child(
+    mask_rb,
+    "PixelFunctionType",
+    as.character(build_mask_pixfun)
+  )
+  pf_args <- xml2::xml_add_child(mask_rb, "PixelFunctionArguments")
+  xml2::xml_set_attr(
+    pf_args,
+    "mask_values",
+    paste(mask_values, collapse = ",")
+  )
+
+  # Add source pointing to the original SCL band
+  xml2::xml_add_child(mask_rb, orig_src)
+
+  inner_vrt_file <- fs::file_temp(
+    tmp_dir = getOption("vrt.cache"),
+    ext = "vrt"
+  )
+  xml2::write_xml(inner_vx, inner_vrt_file)
+
+  # --- Step 2: Create outer VRT with ComplexSource + UseMaskBand ---
+
+  # Use buildVRT to create a pass-through VRT from the inner VRT
+  outer_vrt_file <- fs::file_temp(
+    tmp_dir = getOption("vrt.cache"),
+    ext = "vrt"
+  )
+  gdalraster::buildVRT(
+    outer_vrt_file,
+    inner_vrt_file,
+    cl_arg = src_block_size(inner_vrt_file),
+    quiet = TRUE
+  )
+
+  # Read the outer VRT and modify sources to use ComplexSource + UseMaskBand
+  outer_vx <- xml2::read_xml(outer_vrt_file)
+  outer_bands <- xml2::xml_find_all(outer_vx, ".//VRTRasterBand")
+
+  purrr::walk(outer_bands, function(band_node) {
+    srcs <- vrt_find_all_srcs(band_node)
+    purrr::walk(srcs, function(src) {
+      # Convert SimpleSource to ComplexSource by renaming
+      xml2::xml_set_name(src, "ComplexSource")
+      # Add UseMaskBand and NODATA
+      xml2::xml_add_child(src, "UseMaskBand", "true")
+      xml2::xml_add_child(
+        src,
+        "NODATA",
+        format(no_data, scientific = FALSE)
+      )
+    })
+    # Set NoData on the band itself
+    nd_node <- xml2::xml_find_first(band_node, ".//NoDataValue")
+    if (is.na(nd_node)) {
+      xml2::xml_add_child(
+        band_node,
+        "NoDataValue",
+        format(no_data, scientific = FALSE),
+        .where = 0
+      )
+    }
+  })
+
+  xml2::write_xml(outer_vx, outer_vrt_file)
+
+  # Set descriptions and metadata
+  if (drop_mask_band) {
+    data_descs <- descs[-mask_idx]
+  } else {
+    data_descs <- descs
+  }
+  outer_vrt_file <- set_vrt_descriptions(
+    outer_vrt_file,
+    data_descs,
+    as_file = TRUE
+  )
+
+  outer_vrt_file <- set_vrt_metadata(
+    outer_vrt_file,
+    keys = "mask_band_name",
+    values = mask_band,
+    as_file = TRUE
+  )
+
+  build_vrt_block(
+    outer_vrt_file,
+    maskfun = build_mask_pixfun,
+    pixfun = x$pixfun,
+    warped = x$warped,
+    is_remote = x$is_remote
+  )
+}
+
+
+#' Legacy pixel-function-per-band masking approach
+#'
+#' Makes each data band a VRTDerivedRasterBand with a pixel function that
+#' checks the mask value and outputs NoData for masked pixels. Used when
+#' C++ pixel functions are not available or buffering is needed.
+#'
+#' @keywords internal
+#' @noRd
+set_maskfun_legacy <- function(
+  x,
+  mask_band,
+  mask_values,
+  build_mask_pixfun,
+  buffer_size,
+  drop_mask_band
+) {
   set_mask_pixfun <- set_mask(
     buffer_size = buffer_size
   )
@@ -132,9 +336,14 @@ vrt_set_maskfun.vrt_block <- function(
   msk_band <- xml2::xml_find_first(msk_vrt_xml, ".//VRTRasterBand")
   drop_nodatavalue(msk_band)
 
-  # Handle muparser expressions differently
-  if (inherits(build_mask_pixfun, "muparser_expression")) {
-    # For muparser, evaluate the template with mask_values
+  # Handle different pixel function types for mask creation
+  if (inherits(build_mask_pixfun, "cpp_pixel_function")) {
+    set_gdal_pixfun_xml(
+      msk_band,
+      as.character(build_mask_pixfun),
+      list(mask_values = paste(mask_values, collapse = ","))
+    )
+  } else if (inherits(build_mask_pixfun, "muparser_expression")) {
     expr_evaluated <- glue::glue(
       build_mask_pixfun
     )
@@ -147,7 +356,6 @@ vrt_set_maskfun.vrt_block <- function(
       )
     )
   } else {
-    # For Python, set up the pixel function
     xml2::xml_set_attr(msk_band, "subClass", "VRTDerivedRasterBand")
     xml2::xml_add_child(msk_band, "PixelFunctionType", "build_mask")
     xml2::xml_add_child(msk_band, "PixelFunctionLanguage", "Python")
@@ -217,7 +425,6 @@ vrt_set_maskfun.vrt_block <- function(
 
   if (drop_mask_band) {
     xml2::xml_remove(bands[[mask_idx]])
-    # this next bit is needed in case the mask is not the last band.
     regrab_bands <- xml2::xml_find_all(vx, ".//VRTRasterBand")
     purrr::walk(seq_along(regrab_bands), function(i) {
       xml2::xml_set_attr(regrab_bands[[i]], "band", i)
@@ -226,7 +433,6 @@ vrt_set_maskfun.vrt_block <- function(
     set_nodatavalue(bands[[mask_idx]], no_data)
   }
 
-  # Write back to block
   tf <- fs::file_temp(tmp_dir = getOption("vrt.cache"), ext = "vrt")
   xml2::write_xml(vx, tf)
 

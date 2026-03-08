@@ -114,6 +114,11 @@ build_intmask <- function(
     nullok = FALSE
   )
 
+  # Prefer C++ registered pixel function when available
+  if (has_cpp_pixfuns()) {
+    return(build_intmask_cpp())
+  }
+
   if (use_muparser) {
     if (!check_muparser("3.11.4")) {
       muparser_mask_warn("build_intmask")
@@ -123,6 +128,17 @@ build_intmask <- function(
   }
 
   return(build_intmask_python())
+}
+
+#' @details `build_intmask_cpp` returns a C++ pixel function name for integer
+#' masking. The C++ function is registered with GDAL at package load time.
+#' This is the fastest option and doesn't require Python or muparser.
+#' @noRd
+#' @keywords internal
+build_intmask_cpp <- function() {
+  pf <- "vrtility_intmask"
+  class(pf) <- c("cpp_pixel_function", class(pf))
+  return(pf)
 }
 
 build_intmask_python <- function() {
@@ -173,6 +189,11 @@ build_bitmask <- function(
     nullok = FALSE
   )
 
+  # Prefer C++ registered pixel function when available
+  if (has_cpp_pixfuns()) {
+    return(build_bitmask_cpp())
+  }
+
   if (!use_muparser) {
     return(build_bitmask_python())
   }
@@ -183,6 +204,16 @@ build_bitmask <- function(
   }
 
   return(build_bitmask_muparser())
+}
+
+#' @details `build_bitmask_cpp` returns a C++ pixel function name for bitwise
+#' masking. The C++ function is registered with GDAL at package load time.
+#' @noRd
+#' @keywords internal
+build_bitmask_cpp <- function() {
+  pf <- "vrtility_bitmask"
+  class(pf) <- c("cpp_pixel_function", class(pf))
+  return(pf)
 }
 
 #' @details `build_bitmask_python` provides a Python pixel function for bitwise

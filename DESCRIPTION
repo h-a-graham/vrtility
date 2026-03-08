@@ -9,7 +9,8 @@ Description: Leverages 'GDAL' Virtual Raster (VRT) capabilities to build
     Uses a modular design based on nested VRTs to enable complex image
     processing tasks including cloud masking, multi-temporal compositing
     (median, quantile, geometric, medoid), and time series filtering. Supports
-    both Python/'NumPy' and 'GDAL' muparser-based pixel functions. Integrates
+    both Python/'NumPy' and 'GDAL' muparser-based pixel functions, with
+    optional C++ registered pixel functions for maximum performance. Integrates
     with SpatioTemporal Asset Catalog (STAC) APIs for cloud-native workflows
     and uses 'mirai' for parallel processing. Powered by 'gdalraster'.
 License: Apache License (>= 2)
@@ -55,7 +56,8 @@ Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-SystemRequirements: Python (>= 3.6)
+SystemRequirements: Python (>= 3.6), GDAL (>= 3.4, optional, for C++ pixel
+    functions)
 VignetteBuilder: knitr
 LinkingTo: 
     Rcpp

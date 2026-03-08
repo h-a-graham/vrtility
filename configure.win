@@ -1,0 +1,38 @@
+#!/bin/sh
+# Windows configure for vrtility
+# Assumes GDAL is available via the rwinlib system or GDAL_HOME
+
+GDAL_CFLAGS=""
+GDAL_LIBS=""
+HAVE_GDAL_PIXFUN="no"
+
+# Check GDAL_HOME (common on Windows with GDAL installed)
+if test -n "${GDAL_HOME}"; then
+  GDAL_CFLAGS="-I${GDAL_HOME}/include"
+  GDAL_LIBS="-L${GDAL_HOME}/lib -lgdal"
+  HAVE_GDAL_PIXFUN="yes"
+  echo "Found GDAL at GDAL_HOME: ${GDAL_HOME}"
+fi
+
+# Try gdal-config if available
+if test "${HAVE_GDAL_PIXFUN}" = "no"; then
+  GDAL_CONFIG=$(command -v gdal-config 2>/dev/null)
+  if test -n "${GDAL_CONFIG}"; then
+    GDAL_CFLAGS=$("${GDAL_CONFIG}" --cflags)
+    GDAL_LIBS=$("${GDAL_CONFIG}" --libs)
+    HAVE_GDAL_PIXFUN="yes"
+    echo "Found GDAL via gdal-config"
+  fi
+fi
+
+if test "${HAVE_GDAL_PIXFUN}" = "no"; then
+  echo "GDAL not found. C++ pixel functions will not be available."
+fi
+
+sed \
+  -e "s|@GDAL_CFLAGS@|${GDAL_CFLAGS}|" \
+  -e "s|@GDAL_LIBS@|${GDAL_LIBS}|" \
+  -e "s|@HAVE_GDAL_PIXFUN@|${HAVE_GDAL_PIXFUN}|" \
+  src/Makevars.in > src/Makevars.win
+
+echo "Configuration complete."
