@@ -62,12 +62,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// register_vrtility_pixel_functions
+bool register_vrtility_pixel_functions();
+RcppExport SEXP _vrtility_register_vrtility_pixel_functions() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(register_vrtility_pixel_functions());
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_vrtility_hampel_filter_matrix_cpp", (DL_FUNC) &_vrtility_hampel_filter_matrix_cpp, 4},
     {"_vrtility_matrix_to_rowlist_cpp", (DL_FUNC) &_vrtility_matrix_to_rowlist_cpp, 1},
     {"_vrtility_extract_band_matrices_cpp", (DL_FUNC) &_vrtility_extract_band_matrices_cpp, 6},
     {"_vrtility_restructure_cells_cpp", (DL_FUNC) &_vrtility_restructure_cells_cpp, 1},
+    {"_vrtility_register_vrtility_pixel_functions", (DL_FUNC) &_vrtility_register_vrtility_pixel_functions, 0},
     {NULL, NULL, 0}
 };
 

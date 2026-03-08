@@ -181,9 +181,7 @@ set the GDAL_CACHEMAX option as a fraction of the total RAM on your system.
 
 check_muparser can be used to check if the installed gdal version was built
 with muparser support; muparser is required for derived bands using
-\code{\link{vrt_derived_block}} or if \code{options("vrtility.use_muparser")} is
-set to TRUE when using \code{\link{vrt_set_maskfun}} with muparser-based
-masks.
+\code{\link{vrt_derived_block}}.
 }
 \examples{
 gdal_config_options(GDAL_HTTP_USERPWD = "user:password")

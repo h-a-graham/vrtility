@@ -1,0 +1,59 @@
+#!/bin/sh
+# configure script for vrtility
+# Finds GDAL headers and libraries needed for C++ pixel function registration
+
+# Find R
+: ${R_HOME=`R RHOME`}
+if test -z "${R_HOME}"; then
+  echo "could not determine R_HOME"
+  exit 1
+fi
+
+# Try gdal-config first
+GDAL_CONFIG=$(command -v gdal-config 2>/dev/null)
+
+if test -n "${GDAL_CONFIG}"; then
+  GDAL_CFLAGS=$("${GDAL_CONFIG}" --cflags)
+  GDAL_LIBS=$("${GDAL_CONFIG}" --libs)
+  GDAL_VERSION=$("${GDAL_CONFIG}" --version)
+  echo "Found GDAL ${GDAL_VERSION} via gdal-config"
+else
+  # Try pkg-config
+  PKG_CONFIG=$(command -v pkg-config 2>/dev/null)
+  if test -n "${PKG_CONFIG}" && "${PKG_CONFIG}" --exists gdal 2>/dev/null; then
+    GDAL_CFLAGS=$("${PKG_CONFIG}" --cflags gdal)
+    GDAL_LIBS=$("${PKG_CONFIG}" --libs gdal)
+    GDAL_VERSION=$("${PKG_CONFIG}" --modversion gdal)
+    echo "Found GDAL ${GDAL_VERSION} via pkg-config"
+  else
+    echo "-------------------------------------------------------"
+    echo "ERROR: GDAL not found via gdal-config or pkg-config."
+    echo "GDAL >= 3.4 is required for vrtility."
+    echo "-------------------------------------------------------"
+    exit 1
+  fi
+fi
+
+# Check for GDAL >= 3.4 (needed for GDALAddDerivedBandPixelFuncWithArgs)
+if test -n "${GDAL_VERSION}"; then
+  GDAL_MAJOR=$(echo "${GDAL_VERSION}" | cut -d. -f1)
+  GDAL_MINOR=$(echo "${GDAL_VERSION}" | cut -d. -f2)
+  if test "${GDAL_MAJOR}" -gt 3 2>/dev/null || \
+     (test "${GDAL_MAJOR}" -eq 3 && test "${GDAL_MINOR}" -ge 4 2>/dev/null); then
+    echo "GDAL >= 3.4 detected: C++ pixel functions enabled"
+  else
+    echo "-------------------------------------------------------"
+    echo "ERROR: GDAL >= 3.4 is required for vrtility."
+    echo "Found GDAL ${GDAL_VERSION} which is too old."
+    echo "-------------------------------------------------------"
+    exit 1
+  fi
+fi
+
+# Write Makevars
+sed \
+  -e "s|@GDAL_CFLAGS@|${GDAL_CFLAGS}|" \
+  -e "s|@GDAL_LIBS@|${GDAL_LIBS}|" \
+  src/Makevars.in > src/Makevars
+
+echo "Configuration complete."

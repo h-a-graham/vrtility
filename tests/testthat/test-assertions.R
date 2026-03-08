@@ -136,10 +136,3 @@ test_that("v_assert_blosc works", {
     expect_error(v_assert_blosc("abort"))
   }
 })
-
-test_that("muparser_mask_warn produces correct warning", {
-  expect_warning(
-    muparser_mask_warn("test_func"),
-    class = "muparser_not_available_warning"
-  )
-})

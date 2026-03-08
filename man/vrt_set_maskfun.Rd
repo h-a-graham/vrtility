@@ -35,9 +35,9 @@ vrt_set_maskfun(
   drop_mask_band = TRUE
 )
 
-build_intmask(use_muparser = getOption("vrtility.use_muparser", FALSE))
+build_intmask()
 
-build_bitmask(use_muparser = getOption("vrtility.use_muparser", FALSE))
+build_bitmask()
 }
 \arguments{
 \item{x}{A VRT collection}
@@ -46,22 +46,20 @@ build_bitmask(use_muparser = getOption("vrtility.use_muparser", FALSE))
 
 \item{mask_values}{A numeric vector of integer or bit values to be masked.}
 
-\item{build_mask_pixfun}{A character string of the Python code or muparser
-expression to build the mask. If \code{NULL} (default), automatically uses
-\code{\link[=build_intmask]{build_intmask()}} which will choose muparser if the option \code{vrtility.use_muparser}
-is \code{TRUE} with no buffering, otherwise a Python based implementation is used.
-Provided functions include \code{build_intmask} and \code{build_bitmask}. See details.}
+\item{build_mask_pixfun}{A C++ pixel function for building the mask. If
+\code{NULL} (default), uses \code{\link[=build_intmask]{build_intmask()}} which returns a registered C++
+pixel function. Provided functions include \code{\link[=build_intmask]{build_intmask()}} and
+\code{\link[=build_bitmask]{build_bitmask()}}. Python pixel functions are only supported when
+\code{buffer_size > 0}.}
 
 \item{buffer_size}{A buffer size to apply to the mask (numeric, default: 0). A buffer
 size > 0 will dilate the mask by the specified number of pixels.
 This can be useful to remove edge effects around clouds.
 If a buffer size > 0 is specified, the \code{scipy} python library will
-automatically be installed and Python will be used (muparser cannot do buffering).}
+automatically be installed and the legacy Python masking path will be used.}
 
 \item{drop_mask_band}{Logical. If TRUE, the mask band will be removed from
 the VRT block.}
-
-\item{use_muparser}{Logical. If \code{TRUE} and GDAL >= 3.12, uses muparser}
 }
 \value{
 A VRT block with the mask band set.
@@ -72,24 +70,20 @@ A VRT collection with the mask band set.
 Set mask band of a VRT collection
 }
 \details{
-The \code{build_mask_pixfun} function is used to build the mask band. Where the
-mask band is a true bitmask and bit-wise operations are required, the
-\code{\link[=build_bitmask]{build_bitmask()}} function should be used. For integer-based masking, where
-the mask band is provided as a single band with integer values, the
-\code{\link[=build_intmask]{build_intmask()}} function should be used.
+Masking uses GDAL's native VRT MaskBand mechanism (RFC 15). A C++ pixel
+function converts classification values to a standard mask (0=invalid,
+255=valid), which is set as a dataset-level MaskBand. An outer VRT then
+references the inner VRT using ComplexSource with UseMaskBand=true, so
+GDAL natively handles the masking.
 
-By default (when \code{build_mask_pixfun = NULL}), the function automatically
-selects the most efficient implementation:
-\itemize{
-\item GDAL >= 3.12 with no buffering: Uses muparser expressions (fastest, no Python)
-\item GDAL < 3.12 or buffering needed: Uses Python/NumPy
-}
+For integer-based masking (e.g. Sentinel-2 SCL band), use \code{\link[=build_intmask]{build_intmask()}}.
+For bitwise masking (e.g. HLS Fmask), use \code{\link[=build_bitmask]{build_bitmask()}}.
 
 \code{build_intmask} provides an integer mask function that can be used
 to mask out pixels based on a band containing true integer/numeric values.
 This would be appropriate for the Sentinel 2A SCL band, for example.
 
-\code{build_bitmask} provides is a simple bit-wise mask function that can
+\code{build_bitmask} provides a simple bit-wise mask function that can
 be used to mask out pixels based on a true bit mask. This function should be
 used where bitwise operations are required. e.g. for HLS data, the "Fmask"
 band requires bitwise operations to extract the mask values.
@@ -99,19 +93,10 @@ s2files <- fs::dir_ls(system.file("s2-data", package = "vrtility"))
 
 ex_collect <- vrt_collect(s2files)
 
-# Auto-selects muparser or Python based on GDAL version
 ex_collect |>
   vrt_set_maskfun(
     mask_band = "SCL",
     mask_values = c(0, 1, 2, 3, 8, 9, 10, 11),
-    drop_mask_band = FALSE)
-
-# Force Python implementation
-ex_collect |>
-  vrt_set_maskfun(
-    mask_band = "SCL",
-    mask_values = c(0, 1, 2, 3, 8, 9, 10, 11),
-    build_mask_pixfun = build_intmask(),
     drop_mask_band = FALSE)
 
 }

@@ -8,10 +8,11 @@ Description: Leverages 'GDAL' Virtual Raster (VRT) capabilities to build
     efficient raster processing pipelines for Earth Observation applications.
     Uses a modular design based on nested VRTs to enable complex image
     processing tasks including cloud masking, multi-temporal compositing
-    (median, quantile, geometric, medoid), and time series filtering. Supports
-    both Python/'NumPy' and 'GDAL' muparser-based pixel functions. Integrates
-    with SpatioTemporal Asset Catalog (STAC) APIs for cloud-native workflows
-    and uses 'mirai' for parallel processing. Powered by 'gdalraster'.
+    (median, quantile, geometric, medoid), and time series filtering. Uses
+    C++ registered pixel functions with 'GDAL' for high-performance masking
+    and compositing, with Python/'NumPy' support for custom pixel functions.
+    Integrates with SpatioTemporal Asset Catalog (STAC) APIs for cloud-native
+    workflows and uses 'mirai' for parallel processing. Powered by 'gdalraster'.
 License: Apache License (>= 2)
 URL: https://permian-global-research.github.io/vrtility/,
     https://github.com/Permian-Global-Research/vrtility
@@ -55,7 +56,7 @@ Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-SystemRequirements: Python (>= 3.6)
+SystemRequirements: Python (>= 3.6), GDAL (>= 3.4)
 VignetteBuilder: knitr
 LinkingTo: 
     Rcpp

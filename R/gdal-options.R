@@ -320,9 +320,7 @@ check_blosc <- function() {
 #' @details
 #' check_muparser can be used to check if the installed gdal version was built
 #' with muparser support; muparser is required for derived bands using
-#' \code{\link{vrt_derived_block}} or if `options("vrtility.use_muparser")` is
-#' set to TRUE when using \code{\link{vrt_set_maskfun}} with muparser-based
-#' masks.
+#' \code{\link{vrt_derived_block}}.
 check_muparser <- function(gdal_version = "3.11.4") {
   if (!gdal_version_check(gdal_version)) {
     return(FALSE)

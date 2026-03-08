@@ -1,0 +1,40 @@
+#!/bin/sh
+# Windows configure for vrtility
+# GDAL >= 3.4 is required.
+
+GDAL_CFLAGS=""
+GDAL_LIBS=""
+GDAL_FOUND="no"
+
+# Check GDAL_HOME (common on Windows with GDAL installed)
+if test -n "${GDAL_HOME}"; then
+  GDAL_CFLAGS="-I${GDAL_HOME}/include"
+  GDAL_LIBS="-L${GDAL_HOME}/lib -lgdal"
+  GDAL_FOUND="yes"
+  echo "Found GDAL at GDAL_HOME: ${GDAL_HOME}"
+fi
+
+# Try gdal-config if available
+if test "${GDAL_FOUND}" = "no"; then
+  GDAL_CONFIG=$(command -v gdal-config 2>/dev/null)
+  if test -n "${GDAL_CONFIG}"; then
+    GDAL_CFLAGS=$("${GDAL_CONFIG}" --cflags)
+    GDAL_LIBS=$("${GDAL_CONFIG}" --libs)
+    GDAL_FOUND="yes"
+    echo "Found GDAL via gdal-config"
+  fi
+fi
+
+if test "${GDAL_FOUND}" = "no"; then
+  echo "-------------------------------------------------------"
+  echo "ERROR: GDAL not found. GDAL >= 3.4 is required for vrtility."
+  echo "-------------------------------------------------------"
+  exit 1
+fi
+
+sed \
+  -e "s|@GDAL_CFLAGS@|${GDAL_CFLAGS}|" \
+  -e "s|@GDAL_LIBS@|${GDAL_LIBS}|" \
+  src/Makevars.in > src/Makevars.win
+
+echo "Configuration complete."
